@@ -1,8 +1,7 @@
-package database
+package db
 
 import (
 	"errors"
-	"fmt"
 	"github.com/glebarez/sqlite"
 	"github.com/ngoldack/tt/internal/model"
 	"gorm.io/gorm"
@@ -29,6 +28,7 @@ type Manager interface {
 	UpdateTag(tag *model.Tag) error
 	DeleteTag(tag *model.Tag) error
 	FindTags() (tags []model.Tag, err error)
+	FindTagByName(name string) (tag *model.Tag, err error)
 	FindTagsByProject(project *model.Project) (tags []model.Tag, err error)
 }
 
@@ -88,17 +88,14 @@ func (m manager) FindFrameByActive(active bool) (*model.Frame, error) {
 	var frame *model.Frame
 	var err error
 	if active {
-		err = m.db.Where("active = ?", 1).Preload("Project").First(&frame).Error
+		err = m.db.Where("active = ?", 1).Preload("Project").Preload("Tag").First(&frame).Error
+	} else {
+		err = m.db.Where("active = ?", 0).Preload("Project").Preload("Tag").First(&frame).Error
 	}
-	err = m.db.Where("active = ?", 0).Preload("Project").First(&frame).Error
-	fmt.Println(err)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		frame = nil
 		err = nil
 	}
-
-	fmt.Println("frame : ", frame)
-
 	return frame, err
 }
 
@@ -146,7 +143,12 @@ func (m manager) DeleteTag(tag *model.Tag) error {
 }
 
 func (m manager) FindTags() (tags []model.Tag, err error) {
-	err = m.db.Find(tags).Error
+	err = m.db.Find(&tags).Error
+	return
+}
+
+func (m manager) FindTagByName(name string) (tag *model.Tag, err error) {
+	err = m.db.Where("name = ?", name).First(&tag).Error
 	return
 }
 

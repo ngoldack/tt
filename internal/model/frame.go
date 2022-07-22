@@ -8,11 +8,11 @@ import (
 type Frame struct {
 	gorm.Model
 	Active    bool
-	StartTime time.Time
+	StartTime time.Time `gorm:"unique"`
 	StopTime  time.Time
-	projectID int
-	Project   Project
-	tagId     int
-	Tag       Tag
+	ProjectID int
+	Project   *Project
+	TagId     int
+	Tag       *Tag
 	Comment   string
 }
