@@ -1,10 +1,14 @@
 package database
 
 import (
+	"errors"
+	"fmt"
 	"github.com/glebarez/sqlite"
 	"github.com/ngoldack/tt/internal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"log"
+	"os"
 )
 
 type Manager interface {
@@ -18,6 +22,7 @@ type Manager interface {
 	UpdateProject(project *model.Project) error
 	DeleteProject(project *model.Project) error
 	FindProjects() (projects []model.Project, err error)
+	FindProjectByName(name string) (project *model.Project, err error)
 	FindProjectsByActive(active bool) (projects []model.Project, err error)
 
 	CreateTag(tag *model.Tag) error
@@ -34,7 +39,17 @@ type manager struct {
 var Mgr Manager
 
 func init() {
-	db, err := gorm.Open(sqlite.Open("tt.db"), &gorm.Config{})
+	newLogger := logger.New(log.New(os.Stdout, "gorm", 0), logger.Config{
+		Colorful:                  false,
+		IgnoreRecordNotFoundError: true,
+		LogLevel:                  logger.Silent,
+	})
+
+	db, err := gorm.Open(sqlite.Open("tt.db"), &gorm.Config{
+		SkipDefaultTransaction: true,
+		PrepareStmt:            true,
+		Logger:                 newLogger,
+	})
 	if err != nil {
 		log.Fatal("Failed to init db:", err)
 	}
@@ -69,13 +84,22 @@ func (m manager) FindFramesByProject(project *model.Project) (frames []model.Fra
 	return
 }
 
-func (m manager) FindFrameByActive(active bool) (frame *model.Frame, err error) {
+func (m manager) FindFrameByActive(active bool) (*model.Frame, error) {
+	var frame *model.Frame
+	var err error
 	if active {
-		err = m.db.Where("active = ?", 1).First(frame).Error
-		return
+		err = m.db.Where("active = ?", 1).Preload("Project").First(&frame).Error
 	}
-	err = m.db.Where("active = ?", 0).First(frame).Error
-	return
+	err = m.db.Where("active = ?", 0).Preload("Project").First(&frame).Error
+	fmt.Println(err)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		frame = nil
+		err = nil
+	}
+
+	fmt.Println("frame : ", frame)
+
+	return frame, err
 }
 
 func (m manager) CreateProject(project *model.Project) error {
@@ -91,16 +115,21 @@ func (m manager) DeleteProject(project *model.Project) error {
 }
 
 func (m manager) FindProjects() (projects []model.Project, err error) {
-	err = m.db.Find(projects).Error
+	err = m.db.Find(&projects).Error
+	return
+}
+
+func (m manager) FindProjectByName(name string) (project *model.Project, err error) {
+	err = m.db.Where("name = ?", name).Limit(1).Find(&project).Error
 	return
 }
 
 func (m manager) FindProjectsByActive(active bool) (projects []model.Project, err error) {
 	if active {
-		err = m.db.Where("active = ?", 1).Find(projects).Error
+		err = m.db.Where("active = ?", 1).Find(&projects).Error
 		return
 	}
-	err = m.db.Where("active = ?", 0).Find(projects).Error
+	err = m.db.Where("active = ?", 0).Find(&projects).Error
 	return
 }
 
